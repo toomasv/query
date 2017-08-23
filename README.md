@@ -5,7 +5,7 @@ A toy database/query DSL
 First, 
 ```
 do %query.red
-do %examples.red
+do %example.red
 ``` 
 Then try these:
 ```
