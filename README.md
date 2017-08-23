@@ -18,7 +18,7 @@ query [probe table person default]			; how 'default is defined?
 query [probe table person spec]				; to see tables' col spec
 ;---- Queries ----
 query [print [address] of person "Timmu Tamm"] ; here 'default is used as criterion
-query [print [address] of "Edward Kinnock"]
+query [from persons print [address] of "Edward Kinnock"]
 query [print [street house] of person with [first-name = "Oscar"]]
 query [print [index] of address "Tallinn, Sihi 16-4"]
 query [print [first name age] of persons]	; 'first is normal Red function, 'name is template of type block! with first-name and last-name, 'age is also template
