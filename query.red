@@ -668,7 +668,7 @@ dbx: object [
 					'table set table skip ;tables-rule2 ;
 					opt [
 						set tblspec block! (returned: make-table table tblspec)
-					|	set file file! (put tables word do file); load? PROOVIMATA
+					;|	set file file! (put tables word do file); load? PROOVIMATA
 					] 	(active: table)
 				|	['from | 'for] [
 						'selected (selected: yes) tables-rule2 
