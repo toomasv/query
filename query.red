@@ -12,8 +12,12 @@ dbx: object [
 		foreach i series [if fn i [append out i]]
 		out
 	]
-	flatten: func [tree [block!] /local rule][
-		rule: [some [ahead block! into rule | keep skip]] 
+	flatten: func [tree [block!] /level lvl /local rule l][
+		(l: -1)
+		rule: [(l: l + 1) some [
+			ahead block! if (any [not level l < lvl]) into rule (l: l - 1) 
+		| 	keep skip
+		]] 
 		parse tree [collect rule]
 	]
 	has-key: func [map [map! object!] key][to-logic find words-of map key]
@@ -102,15 +106,57 @@ dbx: object [
 	| 	'first | 'second | 'third | 'fourth | 'fifth | 'last 
 	| 	'ascending | 'descending | 'form | 'rejoin 
 	]
-	do-method: func [method returned][
+	do-method: function [method returned /tabular col-names col-lengths][
 		;probe reduce [method returned]
-		case [
-			method = 'view [
-				forall returned [returned/1: form returned/1]
-				view/no-wait [text-list data returned]
+		either tabular [
+			example: returned/1
+			num-cols: length? example
+			cols: copy []
+			templ: copy []
+			letters: "abcdefghijklmnopqrstuvwyz" 
+			if not empty? col-names [
+				repeat n length? col-names [
+					poke col-lengths n max length? col-names/:n col-lengths/:n
+				]
 			]
-			;method = 'browse []
-			method [forall returned [do reduce [method returned/1]]]
+			repeat n length? example [
+				append cols reduce [to-word pick letters n]
+				append templ case [
+					find [integer! date! float!] type?/word example/:n [
+						compose [
+							pad/left (to-word pick letters n) (pick col-lengths n) (either n < length? example ["|"][""])
+						]
+					]
+					true [
+						compose [
+							pad form (to-word pick letters n) (pick col-lengths n) (either n < length? example ["|"][""])
+						]
+					]
+				]
+			]
+			source: flatten/level returned 1
+			unless empty? col-names [
+				col-lengths2: reverse copy col-lengths
+				;probe reduce [col-lengths col-lengths2]
+				repeat n length? col-lengths2 [
+					insert source reduce [pad/with copy "" pick col-lengths2 n #"-"];
+				]
+				insert source col-names;
+			]
+			print "^/"
+			foreach (cols) source [
+				print compose templ
+			]
+			print "^/"
+		][
+			case [
+				method = 'view [
+					forall returned [returned/1: form returned/1]
+					view/no-wait [text-list data returned]
+				]
+				;method = 'browse []
+				method [forall returned [do reduce [method returned/1]]]
+			]
 		]
 	]
 	keyword: ['table | 'get | 'print | 'probe | 'view | 'add | 'db | 'set | 'remove | set-word! | paren!]
@@ -148,12 +194,13 @@ dbx: object [
 		object [
 			name:		tablename
 			aliases: 	copy []
-			templates: 	make map! clear []
+			templates: 	make map! copy []
 			default:	none
 			functions:	object copy []
 			joined:		make block! 2
 			fields:		object copy [];[id: none]
 			id:			none
+			params: 	make map! copy []
 			put tables tablename self
 			spec: parse tablespec [
 				collect [
@@ -230,15 +277,28 @@ dbx: object [
 		]
 	]
 
-	;#####     ADD COLUMNS     ##### TBD
+	;#####     ADD COLUMNS     #####
 	
 	add-column: func [table col][
 		
 	]
 
 	;#####     ADD RECORDS     #####
-	
-	add-records: func [table records /fields field-names /local t id r d f fspec recs type][
+	; Currently:
+	;add person ["Firstname" "Familyname" 1-1-1960 1] ; id of existing address
+	;TBD:
+	;add person ["Firstname" "Familyname" 1-1-1960 "Tallinn, Sihi 16-4"] ; default of existing address
+	;add person ["Firstname" "Familyname" 1-1-1960 [1 "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place id
+	;add person ["Firstname" "Familyname" 1-1-1960 ["Tallinn" "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place default
+	;add person [(first-name family-name) "Firstname1" "Familyname1" "Firstname2" "Familyname2" "Firstname3" "Familyname3"] ;partial regular data
+	;add person [#(first-name: "Firstname1"  family-name: "Familyname1") #(family-name: "Familyname2" first-name: "Firstname2" birthdate: 1-1-1960)] ; partial irregular data
+	;add person ["Firstname" "Familyname" 1-1-1960 [[(city) "Tallinn" [#(name: "Estonia")]] "Sihi" "16-4" "11624"]] ;new or existing address with (existing or non-existing) place/country default
+	add-records: func [
+		table records 
+		/fields field-names 
+		/partial 
+		/local t id r d f fspec recs type
+	][
 		t: 	select tables table
 		id: t/last-id + 1
 		r: 	reduce [id]
@@ -269,14 +329,18 @@ dbx: object [
 	
 	;#####     GET RECORDS     #####
 	
-	get-from: function [table collected fields search criterion limit debug properties collected-by order direction
-		/local t fs ss template cols c sw s val sel ret flds n funcs fn i prepared-ret local-prepared field-words tid order-dirs][
+	get-from: function [
+		table collected fields search criterion limit debug properties collected-by order direction tabular
+		/local t fs ss template cols c sw s val sel ret flds n funcs fn i prepared-ret col-names local-prepared prepared field-words tid order-dirs
+	][
 		n: 0 
 		;probe reduce [table fields search criterion limit]
 		t: 	select tables table
 		bind fields t/functions
 		sel: copy [] ret: copy [] 
 		if collected [funcs: copy [] prepared-ret: copy []]
+		if all [tabular properties] [t/params/col-names: col-names: copy [] t/params/col-lengths: col-lengths: copy []]
+		if collected [prepared: either tabular [col-names][prepared-ret]]
 		if fields = [] [fields: either properties ['cols]['default]]
 		either word? fields [ 
 			fields: switch fields [
@@ -288,7 +352,7 @@ dbx: object [
 			if collected [
 				repeat i length? fields	[
 					if properties [
-						append prepared-ret to-lit-word fields/:i
+						append prepared either tabular [form fields/:i][to-lit-word fields/:i]
 					]
 					append/only prepared-ret copy []
 					append funcs none
@@ -305,7 +369,7 @@ dbx: object [
 					parse fields [some [
 						remove set c [set-word! | string!]
 						(
-							append prepared-ret either set-word? c [to-lit-word c][c]
+							append prepared either set-word? c [either tabular [form c][to-lit-word c]][c]
 							append/only prepared-ret copy []
 							sw: yes
 						) 
@@ -315,10 +379,10 @@ dbx: object [
 							either sw [
 								sw: no
 							][	
-								append prepared-ret either fn [
+								append prepared either fn [
 									form reduce [fn val]
 								][
-									either string? val [val][to-lit-word val]
+									either string? val [val][either tabular [form val][to-lit-word val]]
 								]
 								append/only prepared-ret copy []
 							] 	fn: none
@@ -338,6 +402,19 @@ dbx: object [
 		if block? search 	 [expand-templates search t]
 		unless any [collected properties] [
 			expand-templates fields t 
+		]
+		if all [tabular properties not collected][
+			parse fields [
+				some [
+					remove set c [
+						string!
+					| 	set-word! 
+					] (append col-names form c)
+					[word! | paren! | path!]
+				|	set c [word! | paren! | path!]
+					(append col-names mold c)
+				]
+			]
 		]
 		if order [
 			order-dirs: copy []
@@ -408,28 +485,48 @@ dbx: object [
 							expanded: expand-templates copy fields t
 							bind expanded all-fields
 							flds: copy reduce [reduce expanded]
-							repeat i length? flds/1 either properties [
+							repeat i length? flds/1 either all [properties not tabular][
 								[j: i - 1 * 2 + 2 append/only local-ret/:j reduce flds/1/:i]
 							][
 								[append/only local-ret/:i flds/1/:i]
 							] 
 						][
 							either properties [
-								parse flds: copy fields [some [
-									[
-										[	string!
-										|	change set c set-word! (to-lit-word c)
-										]
-										remove set c [word! | paren! | path!]
-									|	change set c [word! | paren! | path!]
-										(either word? c [to-lit-word c][mold c])
-									] 
-									insert (
-										c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
-										bind c all-fields 
-										to-paren reduce c
-									)
-								]]
+								parse flds: copy fields either tabular [
+									[(n: 0) some [
+										change set c [word! | paren! | path!]
+										(	
+											c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+											bind c all-fields 
+											c: reduce c
+											n: n + 1
+											either n > length? col-lengths [
+												append col-lengths length? form c
+											][
+												poke col-lengths n max length? form c col-lengths/:n
+											]
+											;to-paren 
+											;probe type? first c
+											either block? first c [form c][c]
+										)
+									]]
+								][
+									[some [
+										[
+											[	string!
+											|	change set c set-word! (to-lit-word c)
+											]
+											remove set c [word! | paren! | path!]
+										|	change set c [word! | paren! | path!]
+											(either word? c [to-lit-word c][mold c])
+										] 
+										insert (
+											c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+											bind c all-fields 
+											to-paren reduce c
+										)
+									]]
+								]
 								append/only ret flds
 							][	
 								append/only ret reduce fields
@@ -487,12 +584,12 @@ dbx: object [
 				repeat n length? a-order [
 					either order [
 						case [
-							(pick a-order n) < (pick b-order n) [return pick order-dirs n]
+							(pick a-order n) < (pick b-order n) [return pick order-dirs n];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
 							(pick a-order n) > (pick b-order n) [return not pick order-dirs n]
 						] 
 					][
 						case [
-							(pick a-order n) < (pick b-order n) [return true]
+							(pick a-order n) < (pick b-order n) [return true];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
 							(pick a-order n) > (pick b-order n) [return false]
 						] 
 					]
@@ -538,28 +635,47 @@ dbx: object [
 							collected-by-compare: collected-by-local
 						]
 					]
-					repeat i length? flds/1 either properties [
+					repeat i length? flds/1 either all [properties not tabular] [
 						[j: i - 1 * 2 + 2 append/only local-ret/:j reduce flds/1/:i]
 					][
 						[append/only local-ret/:i flds/1/:i]
-					] 
+					]
+					;probe reduce [local-ret funcs col-names col-lengths]
 				][
 					either properties [
-						parse flds: copy fields [some [
-							[
-								[	string!
-								|	change set c set-word! (to-lit-word c)
-								]
-								remove set c [word! | paren! | path!]
-							|	change set c [word! | paren! | path!]
-								(either word? c [to-lit-word c][mold c])
-							] 
-							insert (
-								c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
-								bind c all-fields 
-								to-paren reduce c
-							)
-						]]
+						parse flds: copy fields either tabular [
+							[(n: 0) some [
+								change set c [word! | paren! | path!]
+								(	
+									c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+									bind c all-fields 
+									c: reduce c
+									n: n + 1
+									either n > length? col-lengths [
+										append col-lengths length? form c
+									][
+										poke col-lengths n max length? form c col-lengths/:n
+									]
+									to-paren c
+								)
+							]]
+						][
+							[some [
+								[
+									[	string!
+									|	change set c set-word! (to-lit-word c)
+									]
+									remove set c [word! | paren! | path!]
+								|	change set c [word! | paren! | path!]
+									(either word? c [to-lit-word c][mold c])
+								] 
+								insert (
+									c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+									bind c all-fields 
+									to-paren reduce c
+								)
+							]]
+						]
 						append/only ret flds
 					][	
 						append/only ret reduce fields
@@ -568,18 +684,26 @@ dbx: object [
 			]
 		]	
 		if collected [
-			append/only ret local-ret
+			append/only ret local-ret 
 			bind funcs functions 
+			;probe reduce [prepared-ret ret]
 			forall ret [
-				repeat i length? prepared-ret either properties [[
+				repeat i length? prepared-ret either all [properties not tabular] [[
 					if even? i [
 						j: i / 2
 						unless none = pick funcs j [ret/1/:i: do reduce [pick funcs j ret/1/:i]]
 					]
 				]][[
 					unless none = pick funcs i [ret/1/:i: do reduce [pick funcs i ret/1/:i]]
+					if tabular [
+						either i > length? col-lengths [
+							append col-lengths length? form ret/1/:i
+						][
+							poke col-lengths i max length? form ret/1/:i col-lengths/:i
+						]
+					]
 				]]
-			]
+			];probe reduce [ret col-names col-lengths]
 		]
 		t/selected: sel
 		t/returned: ret
@@ -623,7 +747,8 @@ dbx: object [
 		spec [block!] 
 		/debug
 		/local word returned tblspec records file limit fields table search code 
-			criterion by pos method collected collected-by properties value tmp no-records prop qry;all-records 
+			criterion by pos method collected collected-by properties value tmp 
+			no-records prop qry tabular;all-records 
 	][
 		fields-rule: [
 			set fields ['all | 'default | block!]
@@ -676,7 +801,7 @@ dbx: object [
 					|	'selected (selected: yes)
 					]
 				|	'db	
-				|	['get | set method ['print | 'probe | 'view ]]; | 'browse | 'do]] 
+				|	['get | set method ['print opt ['tabular (tabular: yes)]| 'probe | 'view ]]; | 'browse | 'do]] 
 					(
 						fields: clear [] qry: yes direction: 'ascending
 						limit: table: search: criterion: collected: collected-by: properties: order: none ;no-records
@@ -698,7 +823,7 @@ dbx: object [
 					|	limit-rule
 					|	by-rule
 					|	fields-rule
-					| 'properties (properties: yes)
+					| 	'properties (properties: yes)
 					|	'of opt [limit-rule | 'all (criterion: search: none)] 
 					|	tables-rule2
 					|	collected-rule
@@ -707,7 +832,7 @@ dbx: object [
 					]
 					(
 						if qry [;probe dbx/active
-							get-from active collected fields search criterion limit debug properties collected-by order direction
+							get-from active collected fields search criterion limit debug properties collected-by order direction tabular 
 							returned: either not by [
 								copy tables/:active/returned
 							][
@@ -716,7 +841,11 @@ dbx: object [
 								copy/part tables/:active/returned by
 							]
 						]
-						do-method method returned
+						either tabular [
+							do-method/tabular method returned either properties [tables/:active/params/col-names][copy []] either properties [tables/:active/params/col-lengths][copy []]
+						][
+							do-method method returned
+						]
 						if all [qry method] [tables/:active/method: method]
 					)
 				|	'next opt [set by integer!] opt [set table tables-rule (active: table)] 
@@ -744,6 +873,7 @@ dbx: object [
 					)
 				] 	(if word [set :word returned word: none])
 			|	'add opt [set table tables-rule (active: table)] 
+				;copy fields to block! ; TBD
 				set records skip ;(probe records) ;block! 
 				(either empty? fields [
 					add-records :active records
@@ -752,6 +882,7 @@ dbx: object [
 				]
 				)
 			|	'set copy changes to [keyword | end]
+				;'set set changes skip 'to copy value to [keyword | end]
 				(change-selected changes active); value)
 			| 	'show []
 			] 
