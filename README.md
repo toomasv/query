@@ -37,4 +37,24 @@ query [get person "Timmu Tamm" set first-name to "Tom" probe persons] ; 'set ope
 query [get person with [family-name = "Tamm"] set first-name to "Taniel" and birthdate to birthdate + 1 probe [default birthdate] of persons]
 ;---- Removing selected records ----
 query [get persons with [city = "London"] remove]
+;---- Tabular print ----
+query [print tabular properties [first-name average age age-group: unique (rejoin ["" a: age / 10 * 10 "-" a + 9])] of person collected by [(age / 10)]]
+
+first-name      | average age | age-group 
+--------------- | ----------- | --------- 
+Edward Ivan     |        15.5 | 10-19     
+Xia Oscar Timmu |        55.0 | 50-59     
+
+== true
+query [print tabular properties [first-name age] of person]
+
+first-name | age 
+---------- | --- 
+Timmu      |  56 
+Oscar      |  54 
+Ivan       |  13 
+Xia        |  55 
+Edward     |  18 
+
+== true
 ```
