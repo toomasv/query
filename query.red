@@ -1,6 +1,6 @@
 Red [File: 		%query.red
 	Author: 	"Toomas Vooglaid"
-	Version: 	"0.11"
+	Version: 	"0.2"
 	Date:		23/8/2017
 ]
 dbx: object [
