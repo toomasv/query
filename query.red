@@ -1,7 +1,7 @@
 Red [File: 		%query.red
 	Author: 	"Toomas Vooglaid"
-	Version: 	"0.1"
-	First-commit:	23/8/2017
+	Version: 	"0.11"
+	Date:		23/8/2017
 ]
 dbx: object [
 
@@ -77,26 +77,38 @@ dbx: object [
 		foreach join t/joined [expand-templates fields join]
 		fields
 	]
-	get-joins: function [join cols all-fields][; fields search][
+	get-joins: function [join cols all-fields /local v][; fields search][
 		;probe reduce [join/name cols reduce cols fields]
 		;jcols: copy join/cols
 		;dups: intersect intersect cols join/cols fields
 		;forall dups [change/only/part find jcols dups/1 to-path reduce [to-word join/name dups/1] 1]
 		join/id: reduce first find cols join/name
-		set (words-of join/fields) next find/skip join/records join/id join/width;join/records
-		;probe join/fields 
+		foreach v (words-of join/fields) [join/fields/:v: none]
+		;probe reduce ["hi" join/name join/fields join/id cols all-fields]
+		if join/id [
+			set (words-of join/fields) next find/skip join/records join/id join/width;join/records
+			;probe join/fields 
+		]
 		bind join/cols join/fields
 		all-fields: make all-fields append body-of join/fields reduce [
 			to-set-word join/name make copy join/fields compose [id: (join/id)]
 		]
-			
-		foreach join2 join/joined [all-fields: get-joins join2 join/cols all-fields]; fields search] 
+		foreach join2 join/joined [
+			;if reduce first find join/cols join2/name [
+				all-fields: get-joins join2 join/cols all-fields
+			;]
+		]; fields search] 
 		;temps: bind body-of join/templates all-fields
 		temps: copy []
-		unless 0 = length? join/templates [insert temps body-of join/templates]
+		;unless 0 = length? join/templates [
+			insert temps body-of join/templates
+		;]
 		if join/default [insert temps compose/deep [default: [(join/default)]]]
 		bind temps all-fields
-		foreach [key val] temps [put temps key first reduce val] 
+		;print "hi"
+		foreach [key val] temps [put temps key first either attempt [v: reduce val][v][[none]]] 
+		;print "ho"
+		;probe reduce [join/name all-fields temps]
 		all-fields/(reduce join/name): make all-fields/(reduce join/name) temps
 		
 		all-fields
@@ -114,11 +126,11 @@ dbx: object [
 			cols: copy []
 			templ: copy []
 			letters: "abcdefghijklmnopqrstuvwyz" 
-			if not empty? col-names [
+			unless empty? col-names [
 				repeat n length? col-names [
 					poke col-lengths n max length? col-names/:n col-lengths/:n
 				]
-			]
+			];probe reduce [returned col-lengths]
 			repeat n length? example [
 				append cols reduce [to-word pick letters n]
 				append templ case [
@@ -190,7 +202,7 @@ dbx: object [
 	
 	;#####     MAKE TABLE    #####
 	
-	make-table: func [tablename tablespec /local plural tbl tmp nam fun obj][
+	make-table: func [tablename tablespec /local plural tbl tmp nam fun obj fld][
 		object [
 			name:		tablename
 			aliases: 	copy []
@@ -221,7 +233,7 @@ dbx: object [
 						)
 					|	['templates | 'template] set tmp block! (extend templates tmp)
 					|	'default set tmp [block! | word!] (default: tmp)
-					|	'functions set tmp block! 
+					|	['function | 'functions] set tmp block! 
 						(
 							obj: copy [] 
 							foreach [nam fun] tmp [
@@ -274,6 +286,125 @@ dbx: object [
 				;]
 				;probe object spec
 			]
+			find-id: function [needle /partial needle-fields /local reply][
+				field-words: compose [tid (words-of fields)]
+				;probe reduce [needle name]
+				case [
+					map? first needle [;probe body-of first needle
+						foreach [key val] body-of needle: first needle [
+							fspec: select spec key
+							type: type?/word val
+							if all [
+								block! = type? fspec
+								not find fspec type
+								find fspec 'table 
+							][
+								val: tables/:key/find-id val
+							]
+						]
+						find-id/partial values-of needle keys-of needle
+					]
+					paren? first needle [;probe needle
+						field-names: to-block take needle
+						;spec1: copy []
+						forall needle [
+							idx: index? needle
+							fspec: select spec f: field-names/:idx
+							type: type?/word first needle
+							if all [
+								block! = type? fspec
+								not find fspec type
+								find fspec 'table 
+							][
+								needle/1: tables/:f/find-id needle/1
+							]
+							;append spec1 reduce [
+							;	to-set-word pick field-names idx
+							;	first needle
+							;]
+						]
+						find-id/partial needle field-names
+					]
+					all [ 
+						block? needle 
+						either partial [
+							;probe reduce [needle needle-fields]
+							all [
+								field-words: compose [tid (words-of fields)]
+								foreach (field-words) records [
+									bind needle-fields fields
+									;probe reduce [reduce needle-fields fields tid]
+									if needle = reduce needle-fields [
+										return tid
+									]
+								]
+							]
+						][	
+							width = ((length? needle) + 1) 
+							any [
+								all [
+									recs: find/skip next records needle width
+									integer? id: first back recs
+								]
+								all [
+									forall needle [
+										fspec: select spec f: pick cols (((index? needle) - 1) % (width - 1) + 2)
+										type: type?/word first needle
+										;d: first needle
+										;probe reduce [f d type]
+										case [
+											all [
+												block! = type? fspec
+												not find fspec type
+												find fspec 'table 
+											][
+												needle/1: tables/:f/find-id needle/1
+											]
+										]
+									] 
+									recs: find/skip next records needle width
+									integer? id: first back recs
+								]
+							]
+						]
+					][return id]
+					all [default 
+						foreach (field-words) records [
+							expand-templates def: copy default self
+							all-fields: make copy fields reduce [
+								to-set-word 'id tid 
+								to-set-word name make copy fields compose [id: (tid)]
+							] 
+							bind cols all-fields
+							foreach join joined [
+								all-fields: get-joins join cols all-fields
+							]
+							bind def all-fields
+							if needle = first reduce def [return tid]
+						]
+						false
+					][]
+					all [
+						;probe reduce [copy "Not found: " needle needle-fields]
+						comment {
+						unless attempt ["2" = reply][
+							reply: ask copy rejoin [
+								"The needle '" needle-fields "' for '" name "' with value '" needle 
+								"' was not found! Create one? (0-No; 1-Yes; 2-Yes for all) "]
+						]
+						if find ["1" "2"] reply [
+						}
+							either partial [
+								add-records/fields name needle needle-fields
+							][
+								add-records name needle
+							]
+							return last-id
+						;]
+					]
+					true [cause-error 'user 'message rejoin ["Couldn't find " needle "!"]]
+				]
+			]
 		]
 	]
 
@@ -286,10 +417,12 @@ dbx: object [
 	;#####     ADD RECORDS     #####
 	; Currently:
 	;add person ["Firstname" "Familyname" 1-1-1960 1] ; id of existing address
-	;TBD:
 	;add person ["Firstname" "Familyname" 1-1-1960 "Tallinn, Sihi 16-4"] ; default of existing address
+	;TBD:
 	;add person ["Firstname" "Familyname" 1-1-1960 [1 "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place id
 	;add person ["Firstname" "Familyname" 1-1-1960 ["Tallinn" "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place default
+	;add person ["Firstname" "Familyname" 1-1-1960 [["Riga" ["Latvia" 1960000] none] "Hanzas" "1" "LV-1010"]] ;new address with new place and new country record
+	;add person ["Heino" "Eller" 10-10-1970 [["Paris" ["France" none] none] "Rue du Bac" "100" "75007"]]
 	;add person [(first-name family-name) "Firstname1" "Familyname1" "Firstname2" "Familyname2" "Firstname3" "Familyname3"] ;partial regular data
 	;add person [#(first-name: "Firstname1"  family-name: "Familyname1") #(family-name: "Familyname2" first-name: "Firstname2" birthdate: 1-1-1960)] ; partial irregular data
 	;add person ["Firstname" "Familyname" 1-1-1960 [[(city) "Tallinn" [#(name: "Estonia")]] "Sihi" "16-4" "11624"]] ;new or existing address with (existing or non-existing) place/country default
@@ -299,30 +432,61 @@ dbx: object [
 		/partial 
 		/local t id r d f fspec recs type
 	][
+		;probe reduce [table records]
 		t: 	select tables table
 		id: t/last-id + 1
 		r: 	reduce [id]
-		recs: reduce records
-		forall recs [
-			fspec: select t/spec f: pick t/cols (((index? recs) - 1) % (t/width - 1) + 2)
-			type: type?/word first recs
-			;d: first recs
-			;probe f probe d print type?/word d print type
-			either any [
-				not block! = type? fspec
-				find fspec type;type?/word d
-				none = reduce recs/1
-			][
-				append/only r first recs;d 
-				if (length? r) = t/width [ 
-					append t/records copy r 
-					t/length: t/length + 1 
-					t/last-id: id 
-					id: t/last-id + 1 
-					r: reduce [id]
+		if paren? first records [
+			fields: yes
+			field-names: to-block take records
+		]
+		foreach w words-of t/fields [
+			t/fields/:w: none
+		]
+		case [
+			fields [
+				recs: reduce records
+				foreach (field-names) recs [
+					forall field-names [
+						t/fields/(field-names/1): reduce field-names/1
+					]
+					add-records t/name values-of t/fields
 				]
-			][
-				cause-error 'user 'message reduce [rejoin ["Wrong datatype for " f]]
+			]
+			map? first records [
+				forall records [
+					fields: make t/fields body-of records/1
+					add-records t/name values-of fields
+				]
+			]
+			true [
+				recs: reduce records
+				forall recs [
+					fspec: select t/spec f: pick t/cols (((index? recs) - 1) % (t/width - 1) + 2)
+					type: type?/word first recs
+					;d: first recs
+					;probe f probe d print type?/word d print type
+					either any [
+						not block! = type? fspec
+						find fspec type;type?/word d
+						none = reduce recs/1
+						all [
+							find fspec 'table ;probe recs/1
+							recs/1: tables/:f/find-id recs/1
+						]
+					][
+						append/only r first recs;d 
+						if (length? r) = t/width [ 
+							append t/records copy r 
+							t/length: t/length + 1 
+							t/last-id: id 
+							id: t/last-id + 1 
+							r: reduce [id]
+						]
+					][
+						cause-error 'user 'message reduce [rejoin ["Wrong datatype for " f]]
+					]
+				]
 			]
 		]
 	]
@@ -339,7 +503,8 @@ dbx: object [
 		bind fields t/functions
 		sel: copy [] ret: copy [] 
 		if collected [funcs: copy [] prepared-ret: copy []]
-		if all [tabular properties] [t/params/col-names: col-names: copy [] t/params/col-lengths: col-lengths: copy []]
+		if all [tabular properties] [t/params/col-names: col-names: copy []] 
+		if tabular [t/params/col-lengths: col-lengths: copy []]
 		if collected [prepared: either tabular [col-names][prepared-ret]]
 		if fields = [] [fields: either properties ['cols]['default]]
 		either word? fields [ 
@@ -443,6 +608,7 @@ dbx: object [
 			to-set-word 'order-dirs		order-dirs
 		]]
 		if collected [local-ret: copy/deep prepared-ret]
+		foreach v words-of t/fields [t/fields/:v: none]
 		field-words: compose [tid (words-of t/fields)]
 		cols: copy t/cols
 		foreach (field-words) t/records [
@@ -453,27 +619,41 @@ dbx: object [
 			]
 			bind cols t/fields;t/cols
 			foreach join t/joined [
-				all-fields: get-joins join cols all-fields; fields search
+				;if reduce first find cols join/name [
+					all-fields: get-joins join cols all-fields; fields search
+				;]
 			]
-			unless any [collected-by all [order not collected-by]] [
+			unless any [
+				collected-by 
+				all [order not collected-by] 
+			][
 				temps: copy []
-				unless 0 = length? t/templates [insert temps body-of t/templates]
+				insert temps body-of t/templates
 				if t/default [insert temps compose/deep [default: [(t/default)]]]
 				bind temps all-fields
-				foreach [key val] temps [put temps key first reduce val] 
+				foreach [key val] temps [put temps key first either attempt [v: reduce val][v][[none]]] 
 				;probe temps
 				all-fields/(reduce t/name): make all-fields/(reduce t/name) temps
+				;probe all-fields
 				bind fields all-fields
-				;probe reduce fields
+				;probe fields
 			]
 			if search [
 				bind search all-fields 
+				srch: copy search
+				forall srch [
+					case [
+						find [op! native! action! function!] type?/word srch/1 []
+						attempt [reduce srch/1][srch/1: reduce srch/1]
+						true [srch/1: false]
+					]
+				]
+				;probe srch
 			]
-			;probe all-fields
 			if any [ 
 				all [criterion = none search = none]
-				all [criterion criterion = do reduce search]
-				all [not criterion all reduce search]
+				all [criterion criterion = do reduce srch]
+				all [not criterion either attempt [all reduce srch][true][false]]
 			][ 
 				either any [collected-by order] [
 					append/only sel find/skip t/records reduce cols t/width
@@ -484,7 +664,9 @@ dbx: object [
 						either collected [
 							expanded: expand-templates copy fields t
 							bind expanded all-fields
-							flds: copy reduce [reduce expanded]
+							forall expanded [expanded/1: either attempt [reduce expanded/1][reduce expanded/1][none]]
+							;probe expanded
+							flds: copy reduce [expanded];[reduce expanded]
 							repeat i length? flds/1 either all [properties not tabular][
 								[j: i - 1 * 2 + 2 append/only local-ret/:j reduce flds/1/:i]
 							][
@@ -498,7 +680,7 @@ dbx: object [
 										(	
 											c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
 											bind c all-fields 
-											c: reduce c
+											c: either attempt [reduce c][reduce c][[none]]
 											n: n + 1
 											either n > length? col-lengths [
 												append col-lengths length? form c
@@ -523,13 +705,33 @@ dbx: object [
 										insert (
 											c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
 											bind c all-fields 
-											to-paren reduce c
+											either attempt [reduce c][to-paren reduce c][none]
 										)
 									]]
 								]
 								append/only ret flds
-							][	
-								append/only ret reduce fields
+							][
+								if tabular [ 
+									parse fields [
+										[(n: 0) some [
+											remove set-word!
+										|	set c [word! | paren! | path! | string! | number!]
+											(	c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+												bind c all-fields 
+												c: either attempt [reduce c][reduce c][[none]]
+												n: n + 1
+												either n > length? col-lengths [
+													append col-lengths length? form c
+												][
+													poke col-lengths n max length? form c col-lengths/:n
+												]
+											)
+										]]
+									]
+								];probe fields
+								flds: copy fields
+								forall flds [flds/1: either attempt [reduce flds/1][reduce flds/1][none]]
+								append/only ret flds
 							]
 						]
 					]
@@ -565,33 +767,40 @@ dbx: object [
 				unless 0 = length? t/templates [insert temps body-of t/templates]
 				if t/default [insert temps compose/deep [default: [(t/default)]]]
 				bind temps a-fields
-				foreach [key val] temps [put temps key first reduce val] 
+				foreach [key val] temps [put temps key first either attempt [v: reduce val][v][[none]]] 
 				a-fields/(reduce t/name): make a-fields/(reduce t/name) temps
 				
 				temps: copy []
 				unless 0 = length? t/templates [insert temps body-of t/templates]
 				if t/default [insert temps compose/deep [default: [(t/default)]]]
 				bind temps b-fields
-				foreach [key val] temps [put temps key first reduce val] 
+				foreach [key val] temps [put temps key first either attempt [v: reduce val][v][[none]]] 
 				b-fields/(reduce t/name): make b-fields/(reduce t/name) temps
 				
 				ord: either order [order][collected-by]
 				
-				a-order: reduce bind copy ord a-fields
-				b-order: reduce bind copy ord b-fields
+				a-order: bind copy ord a-fields
+				forall a-order [a-order/1: either attempt [reduce a-order/1][reduce a-order/1][none]]
+				
+				b-order: bind copy ord b-fields
+				forall b-order [b-order/1: either attempt [reduce b-order/1][reduce b-order/1][none]]
 				;probe reduce [a-order b-order order-dirs]
 				
 				repeat n length? a-order [
 					either order [
-						case [
-							(pick a-order n) < (pick b-order n) [return pick order-dirs n];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
-							(pick a-order n) > (pick b-order n) [return not pick order-dirs n]
-						] 
+						if all [pick a-order n pick b-order n][
+							case [
+								(pick a-order n) < (pick b-order n) [return pick order-dirs n];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
+								(pick a-order n) > (pick b-order n) [return not pick order-dirs n]
+							] 
+						]
 					][
-						case [
-							(pick a-order n) < (pick b-order n) [return true];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
-							(pick a-order n) > (pick b-order n) [return false]
-						] 
+						if all [pick a-order n pick b-order n][
+							case [
+								(pick a-order n) < (pick b-order n) [return true];probe reduce [n pick a-order n pick order-dirs n pick b-order n] 
+								(pick a-order n) > (pick b-order n) [return false]
+							] 
+						]
 					]
 				] return true
 			] 
@@ -614,20 +823,39 @@ dbx: object [
 				unless 0 = length? t/templates [insert temps body-of t/templates]
 				if t/default [insert temps compose/deep [default: [(t/default)]]]
 				bind temps all-fields
-				foreach [key val] temps [put temps key first reduce val] 
+				foreach [key val] temps [put temps key first either attempt [v: reduce val][v][[none]]] 
 				all-fields/(reduce t/name): make all-fields/(reduce t/name) temps
 				bind fields all-fields
-				if search [
-					bind search all-fields 
-				]
+				;if search [
+				;	bind search all-fields 
+				;]
 
 				either collected [
 					;if collected-by [probe reduce [collected-by reduce collected-by]]
 					expanded: expand-templates copy fields t
 					bind expanded all-fields
-					flds: copy reduce [reduce expanded]
+					forall expanded [
+							expanded/1: either attempt [
+								reduce expanded/1
+							][
+								reduce expanded/1
+							][none]
+						]
+					flds: copy reduce [expanded]
 					if collected-by [
-						collected-by-local: reduce bind collected-by all-fields
+						collected-by-local: copy bind collected-by all-fields
+						forall collected-by-local [
+							case [
+								find [op! native! action! function!] type? collected-by-local/1 []
+								attempt [
+									reduce collected-by-local/1
+								][
+									collected-by-local/1: reduce collected-by-local/1
+								]
+								true [collected-by-local/1: none]
+							]
+						]
+						collected-by-local: either attempt [reduce collected-by-local][reduce collected-by-local][none]
 						unless collected-by-compare [collected-by-compare: collected-by-local]
 						if collected-by-compare <> collected-by-local [
 							append/only ret copy/deep local-ret
@@ -649,7 +877,7 @@ dbx: object [
 								(	
 									c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
 									bind c all-fields 
-									c: reduce c
+									c: either attempt [reduce c][reduce c][[none]]
 									n: n + 1
 									either n > length? col-lengths [
 										append col-lengths length? form c
@@ -672,13 +900,33 @@ dbx: object [
 								insert (
 									c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
 									bind c all-fields 
-									to-paren reduce c
+									either attempt [reduce c][to-paren reduce c][none]
 								)
 							]]
 						]
 						append/only ret flds
 					][	
-						append/only ret reduce fields
+						if tabular [ 
+							parse fields [
+								[(n: 0) some [
+									remove set-word!
+								|	set c [word! | paren! | path! | string! | number!]
+									(	c: expand-templates copy either paren? c [to-block c][reduce [c]] t 
+										bind c all-fields 
+										c: either attempt [reduce c][reduce c][[none]]
+										n: n + 1
+										either n > length? col-lengths [
+											append col-lengths length? form c
+										][
+											poke col-lengths n max length? form c col-lengths/:n
+										]
+									)
+								]]
+							]
+						]
+						flds: copy fields
+						forall flds [flds/1: either attempt [reduce flds/1][reduce flds/1][none]]
+						append/only ret flds
 					]
 				]
 			]
@@ -842,7 +1090,7 @@ dbx: object [
 							]
 						]
 						either tabular [
-							do-method/tabular method returned either properties [tables/:active/params/col-names][copy []] either properties [tables/:active/params/col-lengths][copy []]
+							do-method/tabular method returned either properties [tables/:active/params/col-names][copy []] tables/:active/params/col-lengths
 						][
 							do-method method returned
 						]
@@ -873,7 +1121,7 @@ dbx: object [
 					)
 				] 	(if word [set :word returned word: none])
 			|	'add opt [set table tables-rule (active: table)] 
-				;copy fields to block! ; TBD
+				copy fields to block! ; TBD
 				set records skip ;(probe records) ;block! 
 				(either empty? fields [
 					add-records :active records
