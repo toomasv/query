@@ -23,7 +23,22 @@ query [
 		default 	[rejoin [first-name space family-name]]
 	] 
 	add countries 	["China" 1379000000 "Estonia" 1316000 "Great Britain" 65640000 "Russia" 144300000]
+	; OR 
+	add countries name ["China" "Estonia" "Great Britain" "Russia"]
+	; OR
+	add countries [(name) "China" "Estonia" "Great Britain" "Russia"]
 	add places 		["Tallinn" 2 414000 "Beijing" 1 21500000 "London" 3 8788000 "St. Petersburg" 4 4991000]
-	add persons 	["Timmu" "Tamm" 24/10/1960 2 "Oscar" "Brewer" 24/6/1963 3 "Ivan" "Bezrodny" 27/1/2004 4 "Xia" "Chong" 1/1/1962 5 "Edward" "Kinnock" 13/6/1999 3]
 	add addresses 	[1 "Sihi" "16-4" "11624" 1 "Tulbi" "7-3a" "11624" 3 "Trafalgar Sq" "22" "SW1Y 5AY" 4 "Sadovaya" "18" "191023" 2 "East Chang An Avenue" 33 "100004"]
+	add persons 	["Timmu" "Tamm" 24/10/1960 2 "Oscar" "Brewer" 24/6/1963 3 "Ivan" "Bezrodny" 27/1/2004 4 "Xia" "Chong" 1/1/1962 5 "Edward" "Kinnock" 13/6/1999 3]
+	query [add person family-name first-name ["Eller" "Heino" "Brown" "David" "Urantu" "Miguel"]]
+	query [add person [#(family-name: "Escriva" first-name: "Javier") #(first-name: "Marco" address: [[(city) "Madrid"] "Puerta del Sol" "12" none] family-name:"Polo")]]
+	; The following additions are identical in result
+	; I.e. records may be added into connected tables without explixit command
+	; a) positionally:
+	query [add person ["Javier" "Maduro" 14-6-1963 [["Madrid" ["Spain" none] none] "Puerta del Sol" "12" none]]]
+	; OR b) naming order of fields in parens (unnamed fields are set to `none` until default field values will be added):
+	query [add person ["Javier" "Maduro" 14-6-1963 [[(country city) [(name) "Spain"] "Madrid"] "Puerta del Sol" "12" none]]]
+	; OR c) naming fields individually in map:
+	query [add person ["Javier" "Maduro" 14-6-1963 [[#(city: "Madrid" country: [#(name: "Spain")])] "Puerta del Sol" "12" none]]]
+
 ]
