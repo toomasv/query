@@ -1,7 +1,9 @@
-Red [File: 		%query.red
+Red [
+	File: 		%query.red
 	Author: 	"Toomas Vooglaid"
-	Version: 	"0.2"
 	Date:		23/8/2017
+	Version: 	0.21
+	Version-date:	3/9/2017
 ]
 dbx: object [
 
@@ -21,6 +23,15 @@ dbx: object [
 		parse tree [collect rule]
 	]
 	has-key: func [map [map! object!] key][to-logic find words-of map key]
+	sanitize: func [series][
+		forall series [
+			case [
+				find [op! native! action! function!] type? series/1 []
+				attempt [reduce series/1][series/1: reduce series/1]
+				true [series/1: none]
+			]
+		]
+	]
 	to-object: func [val /local i spec v][
 		case [
 			map! = type? val [make object! body-of val] 
@@ -202,18 +213,21 @@ dbx: object [
 	
 	;#####     MAKE TABLE    #####
 	
-	make-table: func [tablename tablespec /local plural tbl tmp nam fun obj fld][
+	make-table: func [tablename tablespec /local plural tbl tmp typ nam fun obj fld][
+		;probe reduce [tablename tablespec]
 		object [
+			put tables tablename self
 			name:		tablename
 			aliases: 	copy []
 			templates: 	make map! copy []
 			default:	none
+			default-type: none
 			functions:	object copy []
 			joined:		make block! 2
 			fields:		object copy [];[id: none]
+			old-fields: none
 			id:			none
 			params: 	make map! copy []
-			put tables tablename self
 			spec: parse tablespec [
 				collect [
 					some [
@@ -232,7 +246,8 @@ dbx: object [
 							append aliases plural
 						)
 					|	['templates | 'template] set tmp block! (extend templates tmp)
-					|	'default set tmp [block! | word!] (default: tmp)
+					|	'default set tmp [block! | word!] 
+						set typ skip (default: tmp default-type: reduce typ)
 					|	['function | 'functions] set tmp block! 
 						(
 							obj: copy [] 
@@ -254,6 +269,7 @@ dbx: object [
 				]
 				plural: to-word tbl
 				put tables plural self
+				append aliases plural
 			]
 			cols: parse spec [collect [
 				some [
@@ -270,6 +286,7 @@ dbx: object [
 			width: 		length? cols
 			length: 	0
 			last-id: 	0
+			last-fetch: 0
 			last-by:	none
 			last-n:		none
 			;selected-fields: none
@@ -335,7 +352,7 @@ dbx: object [
 									bind needle-fields fields
 									;probe reduce [reduce needle-fields fields tid]
 									if needle = reduce needle-fields [
-										return tid
+										return self/last-fetch: tid
 									]
 								]
 							]
@@ -367,7 +384,7 @@ dbx: object [
 								]
 							]
 						]
-					][return id]
+					][return self/last-fetch: id]
 					all [default 
 						foreach (field-words) records [
 							expand-templates def: copy default self
@@ -380,25 +397,25 @@ dbx: object [
 								all-fields: get-joins join cols all-fields
 							]
 							bind def all-fields
-							if needle = first reduce def [return tid]
+							if needle = first reduce def [return self/last-fetch: tid]
 						]
 						false
 					][]
 					all [
 						;probe reduce [copy "Not found: " needle needle-fields]
-						comment {
-						unless attempt ["2" = reply][
-							reply: ask copy rejoin [
-								"The needle '" needle-fields "' for '" name "' with value '" needle 
-								"' was not found! Create one? (0-No; 1-Yes; 2-Yes for all) "]
-						]
-						if find ["1" "2"] reply [
-						}
-							either partial [
+
+						;unless attempt ["2" = reply][
+						;	reply: ask copy rejoin [
+						;		"The needle '" needle-fields "' for '" name "' with value '" needle 
+						;		"' was not found! Create one? (0-No; 1-Yes; 2-Yes for all) "]
+						;]
+						;if find ["1" "2"] reply [
+							either partial [ 
 								add-records/fields name needle needle-fields
 							][
 								add-records name needle
 							]
+							self/last-fetch: last-id
 							return last-id
 						;]
 					]
@@ -415,24 +432,15 @@ dbx: object [
 	]
 
 	;#####     ADD RECORDS     #####
-	; Currently:
-	;add person ["Firstname" "Familyname" 1-1-1960 1] ; id of existing address
-	;add person ["Firstname" "Familyname" 1-1-1960 "Tallinn, Sihi 16-4"] ; default of existing address
-	;TBD:
-	;add person ["Firstname" "Familyname" 1-1-1960 [1 "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place id
-	;add person ["Firstname" "Familyname" 1-1-1960 ["Tallinn" "Sihi" "16-4" "11624"]] ;new or existing address with (existing) place default
-	;add person ["Firstname" "Familyname" 1-1-1960 [["Riga" ["Latvia" 1960000] none] "Hanzas" "1" "LV-1010"]] ;new address with new place and new country record
-	;add person ["Heino" "Eller" 10-10-1970 [["Paris" ["France" none] none] "Rue du Bac" "100" "75007"]]
-	;add person [(first-name family-name) "Firstname1" "Familyname1" "Firstname2" "Familyname2" "Firstname3" "Familyname3"] ;partial regular data
-	;add person [#(first-name: "Firstname1"  family-name: "Familyname1") #(family-name: "Familyname2" first-name: "Firstname2" birthdate: 1-1-1960)] ; partial irregular data
-	;add person ["Firstname" "Familyname" 1-1-1960 [[(city) "Tallinn" [#(name: "Estonia")]] "Sihi" "16-4" "11624"]] ;new or existing address with (existing or non-existing) place/country default
+
 	add-records: func [
 		table records 
 		/fields field-names 
 		/partial 
-		/local t id r d f fspec recs type
+		/local t id r d f k v fspec recs type same
 	][
 		;probe reduce [table records]
+		bind records context [same: 'same]
 		t: 	select tables table
 		id: t/last-id + 1
 		r: 	reduce [id]
@@ -440,8 +448,10 @@ dbx: object [
 			fields: yes
 			field-names: to-block take records
 		]
-		foreach w words-of t/fields [
-			t/fields/:w: none
+		;probe t/fields
+		t/old-fields: copy t/fields
+		foreach k words-of t/fields [
+			t/fields/:k: none
 		]
 		case [
 			fields [
@@ -459,7 +469,7 @@ dbx: object [
 					add-records t/name values-of fields
 				]
 			]
-			true [
+			true [;probe records
 				recs: reduce records
 				forall recs [
 					fspec: select t/spec f: pick t/cols (((index? recs) - 1) % (t/width - 1) + 2)
@@ -471,11 +481,21 @@ dbx: object [
 						find fspec type;type?/word d
 						none = reduce recs/1
 						all [
+							recs/1 = 'same
+							probe reduce [f recs/1 t/old-fields]
+							either find fspec 'table [
+								recs/1: tables/:f/last-fetch
+							][
+								recs/1: t/old-fields/:f
+							]
+						]
+						all [
 							find fspec 'table ;probe recs/1
 							recs/1: tables/:f/find-id recs/1
 						]
 					][
 						append/only r first recs;d 
+						t/fields/:f: first recs
 						if (length? r) = t/width [ 
 							append t/records copy r 
 							t/length: t/length + 1 
@@ -483,7 +503,7 @@ dbx: object [
 							id: t/last-id + 1 
 							r: reduce [id]
 						]
-					][
+					][	 
 						cause-error 'user 'message reduce [rejoin ["Wrong datatype for " f]]
 					]
 				]
@@ -497,8 +517,8 @@ dbx: object [
 		table collected fields search criterion limit debug properties collected-by order direction tabular
 		/local t fs ss template cols c sw s val sel ret flds n funcs fn i prepared-ret col-names local-prepared prepared field-words tid order-dirs
 	][
-		n: 0 
 		;probe reduce [table fields search criterion limit]
+		n: 0 
 		t: 	select tables table
 		bind fields t/functions
 		sel: copy [] ret: copy [] 
@@ -608,6 +628,7 @@ dbx: object [
 			to-set-word 'order-dirs		order-dirs
 		]]
 		if collected [local-ret: copy/deep prepared-ret]
+		t/old-fields: copy t/fields
 		foreach v words-of t/fields [t/fields/:v: none]
 		field-words: compose [tid (words-of t/fields)]
 		cols: copy t/cols
@@ -639,21 +660,24 @@ dbx: object [
 				;probe fields
 			]
 			if search [
-				bind search all-fields 
 				srch: copy search
+				bind srch all-fields 
+				;comment {
 				forall srch [
 					case [
-						find [op! native! action! function!] type?/word srch/1 []
+						find [op! native! action! function!] type? srch/1 []
 						attempt [reduce srch/1][srch/1: reduce srch/1]
 						true [srch/1: false]
 					]
 				]
+				;}
+				;sanitize srch
 				;probe srch
 			]
 			if any [ 
 				all [criterion = none search = none]
 				all [criterion criterion = do reduce srch]
-				all [not criterion either attempt [all reduce srch][true][false]]
+				all [not criterion attempt [all reduce srch]];either attempt [all reduce srch][true][false]]
 			][ 
 				either any [collected-by order] [
 					append/only sel find/skip t/records reduce cols t/width
@@ -664,6 +688,7 @@ dbx: object [
 						either collected [
 							expanded: expand-templates copy fields t
 							bind expanded all-fields
+							;sanitize expanded
 							forall expanded [expanded/1: either attempt [reduce expanded/1][reduce expanded/1][none]]
 							;probe expanded
 							flds: copy reduce [expanded];[reduce expanded]
@@ -730,8 +755,10 @@ dbx: object [
 									]
 								];probe fields
 								flds: copy fields
+								;bind flds all-fields
+								;sanitize flds
 								forall flds [flds/1: either attempt [reduce flds/1][reduce flds/1][none]]
-								append/only ret flds
+								append/only ret reduce flds
 							]
 						]
 					]
@@ -780,9 +807,11 @@ dbx: object [
 				ord: either order [order][collected-by]
 				
 				a-order: bind copy ord a-fields
+				;sanitize a-order
 				forall a-order [a-order/1: either attempt [reduce a-order/1][reduce a-order/1][none]]
 				
 				b-order: bind copy ord b-fields
+				;sanitize b-order
 				forall b-order [b-order/1: either attempt [reduce b-order/1][reduce b-order/1][none]]
 				;probe reduce [a-order b-order order-dirs]
 				
@@ -834,16 +863,21 @@ dbx: object [
 					;if collected-by [probe reduce [collected-by reduce collected-by]]
 					expanded: expand-templates copy fields t
 					bind expanded all-fields
+					;sanitize expanded
+					;comment {
 					forall expanded [
-							expanded/1: either attempt [
-								reduce expanded/1
-							][
-								reduce expanded/1
-							][none]
-						]
+						expanded/1: either attempt [
+							reduce expanded/1
+						][
+							reduce expanded/1
+						][none]
+					]
+					;}
 					flds: copy reduce [expanded]
 					if collected-by [
-						collected-by-local: copy bind collected-by all-fields
+						collected-by-local: bind copy collected-by all-fields
+						;sanitize collected-by-local
+						;comment {
 						forall collected-by-local [
 							case [
 								find [op! native! action! function!] type? collected-by-local/1 []
@@ -855,6 +889,7 @@ dbx: object [
 								true [collected-by-local/1: none]
 							]
 						]
+						;}
 						collected-by-local: either attempt [reduce collected-by-local][reduce collected-by-local][none]
 						unless collected-by-compare [collected-by-compare: collected-by-local]
 						if collected-by-compare <> collected-by-local [
@@ -1018,7 +1053,7 @@ dbx: object [
 			all [
 				either word? criterion [criterion: get/any criterion][true] 
 				either block? criterion [empty? fields][true] 
-				(type? criterion) = type? do tables/:active/default
+				(type? criterion) = tables/:active/default-type;type? do tables/:active/default
 			] 
 		) (search: 'default)
 		] ;(all-records: no)]
@@ -1080,6 +1115,7 @@ dbx: object [
 					]
 					(
 						if qry [;probe dbx/active
+							;probe reduce [active collected fields search criterion limit debug properties collected-by order direction tabular]
 							get-from active collected fields search criterion limit debug properties collected-by order direction tabular 
 							returned: either not by [
 								copy tables/:active/returned
