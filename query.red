@@ -448,7 +448,7 @@ dbx: object [
 			fields: yes
 			field-names: to-block take records
 		]
-		;probe t/fields
+		;if table = 'persons [probe t/fields records]
 		t/old-fields: copy t/fields
 		foreach k words-of t/fields [
 			t/fields/:k: none
@@ -482,10 +482,10 @@ dbx: object [
 						none = reduce recs/1
 						all [
 							recs/1 = 'same
-							reduce [f recs/1 t/old-fields]
 							either find fspec 'table [
 								recs/1: tables/:f/last-fetch
 							][
+								reduce [f recs/1 t/old-fields]
 								recs/1: t/old-fields/:f
 							]
 						]
@@ -502,6 +502,7 @@ dbx: object [
 							t/last-id: id 
 							id: t/last-id + 1 
 							r: reduce [id]
+							t/old-fields: copy t/fields
 						]
 					][	 
 						cause-error 'user 'message reduce [rejoin ["Wrong datatype for " f]]
