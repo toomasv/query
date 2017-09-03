@@ -70,5 +70,5 @@ query [
 	; OR c) naming fields individually in map:
 	query [add person ["Javier" "Maduro" 14-6-1963 [[#(city: "Madrid" country: [#(name: "Spain")])] "Puerta del Sol" "12" none]]]
 	; In fields with same values as previous addition, 'same may be used:
-	query [add person ["Jacinta" 'same 10-12-1978 'same]]
+	query [add person ["Jacinta" same 10-12-1978 same]]
 ]
