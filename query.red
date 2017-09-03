@@ -482,7 +482,7 @@ dbx: object [
 						none = reduce recs/1
 						all [
 							recs/1 = 'same
-							probe reduce [f recs/1 t/old-fields]
+							reduce [f recs/1 t/old-fields]
 							either find fspec 'table [
 								recs/1: tables/:f/last-fetch
 							][
