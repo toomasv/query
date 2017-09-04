@@ -121,6 +121,8 @@ Edward     |  18
 
 == true
 ```
+See some data-adding examples in %example.red
+
 Next time do:
 ```
 do %query.red
