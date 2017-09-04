@@ -8,7 +8,7 @@ First,
 ```
 do %query.red
 ``` 
-Then create a file %address-book.rdb with following content:
+Then create a file `address-book.rdb` with following content:
 ```
 Red []
 query [
