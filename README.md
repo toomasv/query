@@ -1,13 +1,76 @@
 # query
 A toy database/query DSL
 
+It's still very raw, expect to meet some bugs.
+
 # Some query examples
 First, 
 ```
 do %query.red
-do %example.red
 ``` 
-Then try these:
+Then create a file %address-book.rdb with following content:
+```
+Red []
+query [
+	table 'country [default [name] string! name [string!] population [integer!]]
+	table 'place [default [city] string! city [string!] country [table integer!] population [integer!]]
+	table 'address [
+		place 		[table integer!] street [string!] house [integer! string!] index [string!] 
+		templates 	[formal-address [rejoin [street space house comma space index space city comma space uppercase country/name]]] 
+		default 	[rejoin [city comma space street space house]] string!
+	]
+	table 'person [
+		alias		[people peoples]
+		first-name 	[string!] family-name [string!] birthdate [date!] ;sex [choice ['male | 'female] word!] 
+		address 	[table integer!] ;father [table 'person defaults [sex 'male] integer!]
+		functions	[formal	[func [nam][rejoin [last nam comma space first nam]]]]
+		templates	[
+			age 		[now - birthdate / 365] 
+			birthday 	[copy/part n: to-string birthdate/date find/last n "-"]
+			formal-name [rejoin [family-name comma space first-name]]
+			name		[reduce [first-name family-name]]
+		]
+		default 	[rejoin [first-name space family-name]] string!
+	] 
+]
+```
+Then use your address-book:
+```
+query [use address-book]
+```
+Add some records to the address-book:
+```
+query [
+	add countries 	[
+		"China" 1379000000 
+		"Estonia" 1316000 
+		"Great Britain" 65640000 
+		"Russia" 144300000
+	]
+	add places 		[
+		"Tallinn" 2 414000 
+		"Beijing" 1 21500000 
+		"London" 3 8788000 
+		"St. Petersburg" 4 4991000
+	]
+	add addresses 	[
+		1 "Sihi" "16-4" "11624" 
+		1 "Tulbi" "7-3a" "11624" 
+		3 "Trafalgar Sq" "22" "SW1Y 5AY" 
+		4 "Sadovaya" "18" "191023" 
+		2 "East Chang An Avenue" 33 "100004"
+	]
+	add persons 	[
+		"Timmu" "Tamm" 24/10/1960 2 
+		"Oscar" "Brewer" 24/6/1963 3 
+		"Ivan" "Bezrodny" 27/1/2004 4 
+		"Xia" "Chong" 1/1/1962 5 
+		"Edward" "Kinnock" 13/6/1999 3
+	]
+]
+```
+Now check your working directory. Some `*.rec` files should be there.
+Then try these (I didn't check for some time, something may be broken):
 ```
 ;---- Reflection ----
 query [probe tables]						; which tables there are?
@@ -58,3 +121,9 @@ Edward     |  18
 
 == true
 ```
+Next time do:
+```
+do %query.red
+query [use address-book]
+```
+... and your data are there.
