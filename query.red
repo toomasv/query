@@ -2,8 +2,8 @@ Red [
 	File: 		%query.red
 	Author: 	"Toomas Vooglaid"
 	Date:		23/8/2017
-	Version: 	0.21
-	Version-date:	3/9/2017
+	Version: 	0.31
+	Version-date:	4/9/2017
 ]
 dbx: object [
 
@@ -209,15 +209,18 @@ dbx: object [
 	]
 	active: none
 	tables: make map! clear []
+	unique: make block! 10
 	tables-rule: none
 	
 	;#####     MAKE TABLE    #####
 	
-	make-table: func [tablename tablespec /local plural tbl tmp typ nam fun obj fld][
+	make-table: func [tablename tablespec /local plural tbl tmp typ nam fun obj fld f][
 		;probe reduce [tablename tablespec]
 		object [
 			put tables tablename self
+			append unique tablename
 			name:		tablename
+			data:		to-file reduce [name ".rec"]
 			aliases: 	copy []
 			templates: 	make map! copy []
 			default:	none
@@ -260,7 +263,6 @@ dbx: object [
 					]
 				]
 			]
-			
 			unless plural [
 				parse tbl: to-string tablename [
 					thru [[#"s" | "sh" | "ch" | #"x" | #"o"] end] insert "es" 
@@ -289,6 +291,11 @@ dbx: object [
 			last-fetch: 0
 			last-by:	none
 			last-n:		none
+			if exists? data [
+				self/records: first reduce system/words/load data 
+				self/last-id: dbx/functions/max to-block extract records width];[write data #" "]
+			on-deep-change*: does [write data records]
+			load:		func [file [file!]][if exists? file self/records: first reduce system/words/load file]
 			;selected-fields: none
 			selected:	none
 			returned: 	none
@@ -1072,6 +1079,7 @@ dbx: object [
 		parse spec [
 			some [
 				set code paren! (do code)
+			|	'use set db skip (do to-file reduce [db ".rdb"])
 			|	opt [set word set-word!]
 				[
 					'table set table skip ;tables-rule2 ;
@@ -1084,14 +1092,14 @@ dbx: object [
 					|	tables-rule2 
 					|	'selected (selected: yes)
 					]
-				|	'db	
 				|	['get | set method ['print opt ['tabular (tabular: yes)]| 'probe | 'view ]]; | 'browse | 'do]] 
 					(
 						fields: clear [] qry: yes direction: 'ascending
 						limit: table: search: criterion: collected: collected-by: properties: order: none ;no-records
 					)
 					any [
-						'tables (returned: reduce [keys-of dbx/tables] qry: no)
+						'unique 'tables (returned: reduce [reduce dbx/unique] qry: no)
+					|	'tables (returned: reduce [keys-of dbx/tables] qry: no)
 					|	'table set table tables-rule set prop skip 
 						(
 							returned: reduce switch/default prop [
