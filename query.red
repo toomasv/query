@@ -23,15 +23,15 @@ dbx: object [
 		parse tree [collect rule]
 	]
 	has-key: func [map [map! object!] key][to-logic find words-of map key]
-	sanitize: func [series][
-		forall series [
-			case [
-				find [op! native! action! function!] type? series/1 []
-				attempt [reduce series/1][series/1: reduce series/1]
-				true [series/1: none]
-			]
-		]
-	]
+	;sanitize: func [series][
+	;	forall series [
+	;		case [
+	;			find [op! native! action! function!] type? series/1 []
+	;			attempt [reduce series/1][series/1: reduce series/1]
+	;			true [series/1: none]
+	;		]
+	;	]
+	;]
 	to-object: func [val /local i spec v][
 		case [
 			map! = type? val [make object! body-of val] 
