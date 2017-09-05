@@ -96,7 +96,7 @@ dbx: object [
 		join/id: reduce first find cols join/name
 		foreach v (words-of join/fields) [join/fields/:v: none]
 		;probe reduce ["hi" join/name join/fields join/id cols all-fields]
-		if join/id [
+		if reduce join/id [
 			set (words-of join/fields) next find/skip join/records join/id join/width;join/records
 			;probe join/fields 
 		]
