@@ -15,7 +15,7 @@ dbx: object [
 		out
 	]
 	flatten: func [tree [block!] /level lvl /local rule l][
-		(l: -1)
+		l: -1
 		rule: [(l: l + 1) some [
 			ahead block! if (any [not level l < lvl]) into rule (l: l - 1) 
 		| 	keep skip
