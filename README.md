@@ -4,6 +4,19 @@ A toy database/query DSL
 It's still very raw, expect to meet some bugs.
 
 # Some query examples
+
+    ```
+    text: read %temp.txt
+    count: 0
+    while [spot: find text "10"][
+        count: count + 1
+        text: next spot
+    ]
+    print count
+    ```
+
+
+
 First, 
 ```
 do %query.red
