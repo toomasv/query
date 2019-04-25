@@ -55,7 +55,7 @@ query [
 		"St. Petersburg" 4 4991000
 	]
 	add addresses 	[
-		1 "Sihi" "16-4" "11624" 
+		1 "Sakala" "16-4" "11624" 
 		1 "Tulbi" "7-3a" "11624" 
 		3 "Trafalgar Sq" "22" "SW1Y 5AY" 
 		4 "Sadovaya" "18" "191023" 
@@ -84,7 +84,7 @@ query [probe table person spec]				; to see tables' col spec
 query [print [address] of person "Timmu Tamm"] ; here 'default is used as criterion
 query [from persons print [address] of "Edward Kinnock"]
 query [print [street house] of person with [first-name = "Oscar"]]
-query [print [index] of address "Tallinn, Sihi 16-4"]
+query [print [index] of address "Tallinn, Sakala 16-4"]
 query [print [(first name) age] of persons]	; 'first is normal Red function, 'name is template of type block! with first-name and last-name, 'age is also template
 query [print [(rejoin [person/default comma space person/age ", " person/birthdate])] person with [address = "London, Trafalgar Sq 22"]]   ; fields, templates, ids can be accessed by path notation and in Red expressions 
 query [probe properties [name: person/name city population: place/population country: country/name population: country/population] of persons]
