@@ -4,6 +4,7 @@ Red [
 	Date:		23/8/2017
 	Version: 	0.31
 	Version-date:	4/9/2017
+	Licence: "MIT"
 ]
 dbx: object [
 
