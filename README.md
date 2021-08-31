@@ -1,7 +1,7 @@
+(Not updated for a long time. May be broken)
+
 # query
 A toy database/query DSL
-
-It's still very raw, expect to meet some bugs.
 
 # Some query examples
 
